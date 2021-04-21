@@ -1,0 +1,305 @@
+---
+title: "netflix"
+author: "Tata"
+date: "4/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 99)
+```
+
+## Library
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggrepel)
+library(plotly)
+library(tibble)
+library(glue)
+library(scales)
+library(wesanderson)
+```
+
+## Read Data
+```{r include=FALSE}
+netflix <- read.csv("data/netflix_titles.csv", na.strings = c("", "NA"), stringsAsFactors = FALSE)
+head(netflix)
+```
+
+## Data Type Update
+```{r}
+netflix$type <- as.factor(netflix$type)
+netflix$country <- as.character(netflix$country)
+netflix$rating <- as.factor(netflix$rating)
+netflix$listed_in <- as.factor(netflix$listed_in)
+netflix$director <- as.factor(netflix$director)
+netflix$date_added<- mdy(netflix$date_added)
+```
+
+
+```{r}
+netflix <- distinct(netflix, type, title, country, release_year, .keep_all = T)
+```
+
+## Plot:
+### Show Types
+```{r}
+netflix_agg <- netflix %>%
+   count(type) %>% 
+   mutate(text = paste("Total:", n)) %>% 
+   group_by(type) %>%
+   ungroup()
+
+type_movies <- netflix_agg %>% 
+  filter(netflix_agg$type == "Movie")
+
+type_tvshows <- netflix_agg %>% 
+  filter(netflix_agg$type == "TV Show")
+
+plot_type <- ggplot(netflix_agg, aes(x = type, y = n, text = text)) + 
+    geom_col(aes(fill = type)) +
+  scale_fill_viridis_d(option = "E") +
+  labs(x = "Category",
+       y = "Category Count",
+       title = "Show Types") +
+  theme_minimal() +
+  scale_y_continuous(breaks = seq(0, 5000, 500)) +
+  scale_fill_brewer(palette = "YlOrBr")
+  
+ggplotly(plot_type, tooltip = "text") %>% 
+  layout(showlegend = FALSE)
+```
+
+### Top 20 Genres
+```{r}
+pal <- wes_palette("GrandBudapest2", 20, type = "continuous")
+plot_genre <- netflix %>%
+  select(listed_in) %>%
+  mutate(listed_in = str_split(listed_in,',')) %>%
+  unnest(listed_in) %>%
+  group_by(listed_in) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(20) %>%
+  mutate(text = paste("Total:", n)) %>% 
+  
+  ggplot() +
+  geom_col(aes(x = n, y = reorder(listed_in, n), fill = n, text = text)) +
+  theme_minimal() +
+  scale_fill_gradientn(colours = pal) +
+  labs(x = "Genre Count",
+       y = "Genre",
+       title = "Top 20 Genres",
+       fill = "Count")
+
+ggplotly(plot_genre, tooltip = "text") %>% 
+  layout(showlegend = FALSE)
+
+```
+### Top 20 Countries
+```{r}
+pal <- wes_palette("GrandBudapest2", 20, type = "continuous")
+plot_country <- netflix %>%
+ filter(!str_detect(country,',')) %>%
+ group_by(country) %>%
+ count() %>%
+ arrange(desc(n)) %>%
+ head(20) %>%
+ mutate(text = paste("Total:", n)) %>% 
+  
+ ggplot() + 
+ geom_col(aes(x = n, y = reorder(country,n), fill = n, text = text)) +
+ #geom_label(aes(x = n, y = reorder(country,n), label = n)) +
+ #scale_fill_gradient(low = "lightgoldenrod1", high = "firebrick") +
+ scale_fill_gradientn(colours = pal) +
+ theme_minimal() +
+ labs(x = "Country",
+      y = "Count",
+      title = "Top 20 Countries",
+      fill = "Count")
+
+ggplotly(plot_country, tooltip = "text")
+```
+
+### Movie Duration
+```{r}
+pal <- wes_palette("GrandBudapest2", 20, type = "continuous")
+duration1 <- na.omit(netflix) %>% 
+ filter(type == "Movie") %>%
+ select("country", "duration") %>% 
+ mutate(country = as.character(country)) %>% 
+ separate_rows(country, sep = ",") %>% 
+ mutate(country = as.factor(country))
+
+duration1$duration <- as.numeric(gsub(" min","", duration1$duration))
+
+duration_subset <- duration1[duration1$country %in% 
+                                        c("United States", "India", "United Kingdom",
+                                          "Canada", "France", "Japan", "Spain", "South Korea",
+                                          "Mexico", "Australia"),]
+
+plot_duration <- ggplot(duration_subset,aes(x = country, y = duration, color = country, fill = country)) +
+  geom_boxplot(aes(outlier.colour = country)) +
+  labs(x = "Country",
+       y = "Duration (in min)",
+       title = "Box-Plots of Movie Duration in Top 10 Countries",
+       margin = list(t = 54),
+       legend = list(x = 100, y = 0.5)) +
+  theme_minimal() +
+  scale_fill_manual(values = wes_palette("GrandBudapest2", n = 10, type = "continuous")) +
+  scale_color_manual(values = wes_palette("GrandBudapest2", n = 10, type = "continuous"))
+  #scale_x_discrete(guide = guide_axis(n.dodge=0))
+
+fig <- ggplotly(plot_duration)
+fig$x$data <- lapply(fig$x$data, FUN = function(x){
+  x$marker$outliercolor = x$line$color 
+  x$marker$color = x$line$color 
+  x$marker$line = x$line$color
+  return(x)
+})
+fig
+
+#ggplotly(plot_duration)
+```
+
+### ...??
+```{r}
+# #split.country <- strsplit(netflix$country, split = ", ")
+# split_country <- netflix %>%
+#   select("country") %>%
+#   mutate(country = str_split(country,", "))
+# 
+# country_split <- data.frame(type = rep(split_country$type, 
+#                                        sapply(split_country, length)), 
+#                             country = unlist(split_country))
+# 
+# cntry_split$country <- as.character(gsub(",","", cntry_split$country))
+# 
+# amount_by_country <- na.omit(cntry_split) %>%
+#   group_by(country, type) %>%
+#   summarise(count = n())
+# 
+# w <- reshape(data = data.frame(amount_by_country), 
+#              idvar = "country",
+#              v.names = "count",
+#              timevar = "type",
+#              direction = "wide") %>% 
+#   arrange(desc(count.Movie)) %>% top_n(12)
+# 
+# names(w)[2] <- "count_movie"
+# names(w)[3] <- "count_tv_show"
+# w <- w[order(desc(w$count_movie + w$count_tv_show)),] 
+# 
+# plot_ly(w, x = w$country, y = ~count_movie, 
+#         type = 'bar', name = 'Movie', marker = list(color = '#bd3939')) %>% 
+#   add_trace(y = ~count_tv_show, name = 'TV Show', marker = list(color = '#399ba3')) %>% 
+#   layout(xaxis = list(categoryorder = "array", 
+#                       categoryarray = w$country, 
+#                       title = "Country"), 
+#          yaxis = list(title = 'Amount of content'),
+#          barmode = 'stack', 
+#          title = "Top 12 Countries by Amount of Produced Content", margin = list(t = 54),
+#          legend = list(x = 100, y = 0.5)) 
+```
+
+### Content Amount
+```{r}
+pal <- wes_palette("GrandBudapest2", 20, type = "continuous")
+netflix$year <- year(netflix$date_added)
+plis <- netflix %>% 
+ select("country", "year", "type") %>% 
+ mutate(country = as.character(country)) %>% 
+ separate_rows(country, sep = ",") %>% 
+ mutate(country = as.factor(country))
+    
+amount_by_country <- na.omit(plis) %>%
+ mutate(country = na_if(country," ")) %>% 
+ group_by(country, type, year) %>%
+ summarise(count = n()) %>% 
+ ungroup()
+      
+plot_content <- ggplot(amount_by_country, aes(year, count, color = country, group = country, 
+                     text = glue("Country: {country}
+                     Type: {type}
+                     Count: {count}
+                     Year: {year}")
+     )) +
+      geom_line() +
+      labs(title = "Amount Content Each Year",
+           x = "Year",
+           y = "Total Content",
+           color = "Country",
+           legend = "Type"
+      ) +
+  theme_minimal() +
+  scale_color_manual(values = wes_palette("GrandBudapest2", n = 200, type = "continuous")) +
+  scale_x_continuous(limits = c(2010, 2021), n.breaks = 12) +
+  scale_fill_gradientn(colours = pal)
+    
+ggplotly(plot_content, tooltip = "text")
+```
+
+### Chart Content Added per Year
+```{r}
+# ubah data frame tibble
+ntbl <- netflix$title
+ntbl <- tibble(ntbl)
+netflix$title <- ntbl
+
+# ambil year aja
+netflix$year <- year(netflix$date_added)
+
+netflix_year <- netflix$title %>% 
+  group_by(netflix$year, netflix$type) %>% 
+  na.omit(netflix$year) %>% 
+  summarise(added_content_num = n())
+
+Type <- netflix_year$`type`
+Year <- netflix_year$`year`
+Content_Number <- netflix_year$`added_content_num`
+
+plot_content_year <- ggplot(netflix_year, aes(Year, 
+                                              Content_Number, 
+                                              color = split_country, 
+                                              group = split_country)) +
+  geom_point() +
+  labs(x = "Year",
+       y = "Number of Content",
+       title = "Content Amount",
+       colour = "Country")
+
+ggplotly(plot_content_year, dynamicTicks = T)
+```
+
+### Leaflet Map (on going)
+```{r}
+library(leaflet)
+library(ggmap)
+
+df = data.frame(mutate(amount_by_country),
+                stringsAsFactors = FALSE)
+geocodes <- geocode(as.character(df$country))
+register_google(key = "AIzaSyCVeEzVO_QcMrltf163ly5wDJBxFnkqiy0", write = TRUE)
+
+locations_df <- mutate_geocode(df, country)
+
+content_popup <- paste(sep = " ",
+                            "Country", amount_by_country$country, "<br>",
+                            "Type:", amount_by_country$type, "<br>",
+                            "Total:", number(amount_by_country$count, big.mark = ",", accuracy = 1), "<br>"
+     )
+     
+     leaflet(data = amount_by_country) %>% 
+         addTiles() %>% 
+         addMarkers(lng = ~Long, lat= ~Lat,
+                    popup = content_popup,
+                    clusterOptions = markerClusterOptions()
+         )
+
+class(df$country)
+is.character(df$country)
+
+```
+

@@ -1,0 +1,12 @@
+name: netflix_analysis
+title: netflix_analysis
+username:
+account: trianinarita
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3928544
+bundleId: 4499897
+url: https://trianinarita.shinyapps.io/netflix_analysis/
+when: 1619008295.17353
+asMultiple: FALSE
+asStatic: FALSE
